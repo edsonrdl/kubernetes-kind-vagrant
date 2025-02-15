@@ -23,62 +23,12 @@ Vagrant.configure("2") do |config|
         vb.cpus = node[:cpus]
       end
 
-      # Provisionamento
+      # Provisionamento: Apenas atualizações básicas (sem Docker/Kind)
       node_config.vm.provision "shell", inline: <<-SHELL
         set -e
         sudo swapoff -a
         sudo sed -i '/ swap / s/^/#/' /etc/fstab
         sudo apt-get update && sudo apt-get upgrade -y
-        sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common jq
-
-        # Instalando Docker
-        curl -fsSL https://get.docker.com | sudo bash
-        sudo usermod -aG docker vagrant
-        newgrp docker
-
-        # Instalando Kind e kubectl
-        KIND_VERSION="v0.20.0"
-        curl -Lo ./kind "https://kind.sigs.k8s.io/dl/$KIND_VERSION/kind-linux-amd64"
-        chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
-
-        KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt)
-        curl -LO "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
-        chmod +x kubectl
-        sudo mv kubectl /usr/local/bin/
-
-        # Criando cluster Kind apenas no nó de controle
-        if [[ "$(hostname)" == "kind-control-plane" ]]; then
-          cat <<EOF > kind-config.yaml
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          networking:
-            disableDefaultCNI: true
-          nodes:
-            - role: control-plane
-            - role: worker
-            - role: worker
-          EOF
-
-          kind create cluster --config kind-config.yaml --name kind-prod
-
-          mkdir -p /home/vagrant/.kube
-          kind get kubeconfig --name kind-prod > /home/vagrant/.kube/config
-          chown -R vagrant:vagrant /home/vagrant/.kube
-
-          # Instalando CNI (Calico) para comunicação entre Pods
-          kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-        fi
-
-        # Se for um nó worker, ingressar no cluster
-        if [[ "$(hostname)" == "kind-worker1" || "$(hostname)" == "kind-worker2" ]]; then
-          while ! test -f /vagrant/join-command.sh; do sleep 2; done
-          chmod +x /vagrant/join-command.sh
-          sudo bash /vagrant/join-command.sh
-        fi
-
-        sudo apt-get autoremove -y
-        sudo apt-get clean
       SHELL
     end
   end
