@@ -10,7 +10,7 @@ Vagrant.configure("2") do |config|
       node_config.vm.box = "ubuntu/focal64"
       node_config.vm.hostname = node[:name]
 
-      # Apenas o Control Plane tem SSH público
+      # Apenas o Control Plane tem SSH acessível pelo host
       if node[:name] == "kind-control-plane"
         node_config.vm.network "forwarded_port", guest: 22, host: node[:ssh_port]
       end
@@ -20,24 +20,23 @@ Vagrant.configure("2") do |config|
 
       # Configuração de hardware
       node_config.vm.provider "virtualbox" do |vb|
-        vb.gui = true  # Abre a interface gráfica automaticamente
+        vb.gui = true  # Mantém GUI ativada
         vb.name = node[:name]
         vb.memory = node[:memory]
         vb.cpus = node[:cpus]
       end
 
-      # Provisionamento: Configuração de login automático e SSH
+      # Provisionamento: Instalação de SSH e login automático
       node_config.vm.provision "shell", inline: <<-SHELL
         set -e
 
-        # Desativa a tela de login exigida no VirtualBox
+        # Configura auto-login para evitar travamento na tela inicial
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         echo '[Service]
         ExecStart=
         ExecStart=-/sbin/agetty --autologin vagrant --noclear %I $TERM
         ' | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
-
-        # Reinicia para aplicar a configuração
+        
         sudo systemctl daemon-reexec
         sudo systemctl restart getty@tty1
 
@@ -48,6 +47,12 @@ Vagrant.configure("2") do |config|
         sudo apt-get install -y openssh-server
         sudo systemctl enable ssh
         sudo systemctl start ssh
+
+        # Permitir login por senha temporariamente
+        echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+        echo "PermitRootLogin no" | sudo tee -a /etc/ssh/sshd_config
+        echo "PubkeyAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+        sudo systemctl restart ssh
       SHELL
     end
   end
