@@ -10,48 +10,51 @@ Vagrant.configure("2") do |config|
       node_config.vm.box = "ubuntu/focal64"
       node_config.vm.hostname = node[:name]
 
-      # Apenas o Control Plane tem SSH acessível pelo host
+      # Apenas o Control Plane tem SSH público
       if node[:name] == "kind-control-plane"
         node_config.vm.network "forwarded_port", guest: 22, host: node[:ssh_port]
       end
 
-      # Rede privada para comunicação entre os nós
+      # Rede privada entre os nós
       node_config.vm.network "private_network", ip: node[:ip]
 
       # Configuração de hardware
       node_config.vm.provider "virtualbox" do |vb|
-        vb.gui = true  # Mantém GUI ativada
+        vb.gui = true  # Garante que as VMs abrem automaticamente no VirtualBox
         vb.name = node[:name]
         vb.memory = node[:memory]
         vb.cpus = node[:cpus]
       end
 
-      # Provisionamento: Instalação de SSH e login automático
+      # Configuração de auto-login para evitar tela de login manual
       node_config.vm.provision "shell", inline: <<-SHELL
         set -e
 
-        # Configura auto-login para evitar travamento na tela inicial
+        # Desativa a tela de login manual e ativa auto-login para vagrant
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         echo '[Service]
         ExecStart=
-        ExecStart=-/sbin/agetty --autologin vagrant --noclear %I $TERM
+        ExecStart=-/sbin/agetty --noclear --autologin vagrant --keep-baud tty1 115200,38400,9600 $TERM
+        Restart=always
         ' | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
-        
+
+        # Reinicia o serviço para aplicar o auto-login
         sudo systemctl daemon-reexec
         sudo systemctl restart getty@tty1
 
-        # Atualiza pacotes e instala SSH
-        sudo swapoff -a
-        sudo sed -i '/ swap / s/^/#/' /etc/fstab
-        sudo apt-get update && sudo apt-get upgrade -y
+        # Instalação do SSH e configuração segura (somente autenticação por chave)
+        sudo apt-get update
         sudo apt-get install -y openssh-server
         sudo systemctl enable ssh
         sudo systemctl start ssh
 
-        # Permitir login por senha temporariamente
-        echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
-        echo "PermitRootLogin no" | sudo tee -a /etc/ssh/sshd_config
-        echo "PubkeyAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+        # Configuração do SSH: Apenas chave SSH, sem login por senha
+        sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+        sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+        sudo sed -i 's/^#*PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+        sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+        # Reinicia o SSH para aplicar as configurações
         sudo systemctl restart ssh
       SHELL
     end
