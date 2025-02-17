@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: minha-app-deploy
 spec:
-  replicas: 4  # Inicia com 4 pods (2 por worker)
+  replicas: 2  # Inicia com 2 pods (1 por worker)
   selector:
     matchLabels:
       app: minha-app

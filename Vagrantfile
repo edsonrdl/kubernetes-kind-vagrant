@@ -1,8 +1,8 @@
 Vagrant.configure("2") do |config|
   nodes = [
-    { name: "kind-control-plane", memory: 4096, cpus: 2, ip: "192.168.56.10", ssh_port: 2222 },
-    { name: "kind-worker1", memory: 3072, cpus: 2, ip: "192.168.56.11" },
-    { name: "kind-worker2", memory: 3072, cpus: 2, ip: "192.168.56.12" }
+    { name: "kind-control-plane", memory: 4096, cpus: 2, ip: "10.0.0.10", ssh_port: 2222 },
+    { name: "kind-worker1", memory: 3072, cpus: 2, ip: "10.0.0.11" },
+    { name: "kind-worker2", memory: 3072, cpus: 2, ip: "10.0.0.12" }
   ]
 
   nodes.each do |node|
@@ -10,7 +10,7 @@ Vagrant.configure("2") do |config|
       node_config.vm.box = "ubuntu/focal64"
       node_config.vm.hostname = node[:name]
 
-      # Apenas o Control Plane tem SSH público
+      # Apenas o Control Plane tem acesso SSH público
       if node[:name] == "kind-control-plane"
         node_config.vm.network "forwarded_port", guest: 22, host: node[:ssh_port]
       end
@@ -18,19 +18,19 @@ Vagrant.configure("2") do |config|
       # Rede privada entre os nós
       node_config.vm.network "private_network", ip: node[:ip]
 
-      # Configuração de hardware
+      # Abre automaticamente a interface gráfica
       node_config.vm.provider "virtualbox" do |vb|
-        vb.gui = true  # Garante que as VMs abrem automaticamente no VirtualBox
+        vb.gui = true  
         vb.name = node[:name]
         vb.memory = node[:memory]
         vb.cpus = node[:cpus]
       end
 
-      # Configuração de auto-login para evitar tela de login manual
+      # Configuração de auto-login para evitar bloqueios na tela de login
       node_config.vm.provision "shell", inline: <<-SHELL
         set -e
 
-        # Desativa a tela de login manual e ativa auto-login para vagrant
+        # Configura auto-login do usuário vagrant
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         echo '[Service]
         ExecStart=
@@ -38,7 +38,6 @@ Vagrant.configure("2") do |config|
         Restart=always
         ' | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
 
-        # Reinicia o serviço para aplicar o auto-login
         sudo systemctl daemon-reexec
         sudo systemctl restart getty@tty1
 
